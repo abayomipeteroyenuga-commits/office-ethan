@@ -145,3 +145,17 @@ body{overflow-x:hidden}
 #presWorkspace .presObject::after{content:"";position:absolute;right:-5px;bottom:-5px;width:9px;height:9px;border:1px solid #63748b;background:#fff;cursor:nwse-resize;display:none;}
 #presWorkspace .presObject:hover::after,#presWorkspace .presObject:focus-within::after,#presWorkspace .presObject.is-selected::after{display:block;}
 @media(max-width:800px){#presWorkspace .presObject .presDragHandle{top:-16px;height:16px;width:36px}.presObject h1,.presObject p{padding:5px 7px!important}}
+
+/* Ethan Office v18.0 expanded productivity layer */
+.wordThemeProfessional{font-family:Arial,sans-serif}.wordThemeProfessional h1,.wordThemeProfessional h2{color:#163f78}
+.wordThemeClassic{font-family:Georgia,'Times New Roman',serif}.wordThemeModern{font-family:Verdana,Arial,sans-serif}.wordThemeModern h1{letter-spacing:-.03em}
+.signatureLine{width:280px;margin:36px 0 12px}.signatureLine div{border-top:1px solid #222}.signatureLine small{display:block;padding-top:5px;color:#667}
+.wordEnvelope{min-height:360px;border:1px dashed #aaa;padding:24px;position:relative;margin:20px 0}.deliveryAddress{position:absolute;left:42%;top:46%;font-size:16px}.returnAddress{font-size:13px}
+.wordLabels{width:100%;border-collapse:separate;border-spacing:10px}.wordLabels td{border:1px solid #bbb;padding:18px;width:50%;height:82px;vertical-align:middle}
+.mergePage{page-break-after:always;padding:24px 0}.mergePreview{max-height:60vh;overflow:auto;background:#fff;padding:24px;border:1px solid #ddd}
+.sheet td.xlHighlight{background:#fff2a8!important;font-weight:700}
+.ribbonTabs{overflow-x:auto;scrollbar-width:thin}.ribbonTabs button{white-space:nowrap}.wordTabs{overflow-x:auto;scrollbar-width:thin}.wordTabs button{white-space:nowrap}
+@media(max-width:900px){.ribbonBody,.wordRibbonPanel{overflow-x:auto;flex-wrap:nowrap}.ribbonGroup{min-width:max-content}}
+
+/* v18.1 device save */
+.deviceSavedPill{background:#eaf8ef!important;color:#176b38!important;border-color:#bfe5cc!important}.v181DeviceSave{white-space:nowrap}

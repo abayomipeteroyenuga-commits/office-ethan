@@ -943,3 +943,233 @@ q('#presWorkspace')?.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e
 
 setTimeout(()=>{try{state.settings.version='17.3.0';DB.save();if(q('#page-presentation .ribbonTabs button'))presTab('home',q('#page-presentation .ribbonTabs button'))}catch(e){console.error('v17 init',e)}},0);
 })();
+
+// ===== Ethan Office v18.0: expanded Office-style capability layer =====
+(function(){
+  const q=s=>document.querySelector(s);
+  function activeWord(){return state.wordDocs.find(x=>x.id===currentWord)}
+
+  // Word: Draw, Design and Mailings workflows.
+  const prevWordTab=window.wordTab;
+  window.wordTab=function(tab,btn){
+    if(['draw','design','mailings'].includes(tab)){
+      btn?.parentElement?.querySelectorAll('button').forEach(x=>x.classList.remove('active')); btn?.classList.add('active');
+      document.querySelectorAll('.wordRibbonPanel').forEach(x=>x.classList.remove('active'));
+      let panel=document.querySelector(`.wordRibbonPanel[data-wordpanel="${tab}"]`);
+      if(!panel){ panel=document.createElement('div'); panel.className='wordRibbonPanel active'; panel.dataset.wordpanel=tab; q('.wordRibbon')?.appendChild(panel); }
+      panel.classList.add('active');
+      if(tab==='draw') panel.innerHTML=`<div class=ribbonGroup><b>Ink</b><button onclick="wordInkMode('pen')">Pen</button><button onclick="wordInkMode('highlighter')">Highlighter</button><input type=color id=wordInkColor value="#1f5fbf"><button onclick="wordInkMode('off')">Select / Stop Ink</button></div><div class=ribbonGroup><b>Drawing</b><button onclick="wordInsertSignatureLine()">Signature Line</button><button onclick="wordInsertHorizontalLine()">Horizontal Line</button></div>`;
+      if(tab==='design') panel.innerHTML=`<div class=ribbonGroup><b>Document Formatting</b><button onclick="wordApplyTheme('professional')">Professional</button><button onclick="wordApplyTheme('classic')">Classic</button><button onclick="wordApplyTheme('modern')">Modern</button></div><div class=ribbonGroup><b>Page Background</b><button onclick="wordWatermark()">Watermark</button><input type=color title="Page color" onchange="wordPageColor(this.value)"><button onclick="wordPageBorders('box')">Page Border</button><button onclick="wordPageBorders('none')">Remove Border</button></div>`;
+      if(tab==='mailings') panel.innerHTML=`<div class=ribbonGroup><b>Create</b><button onclick="wordEnvelope()">Envelopes</button><button onclick="wordLabels()">Labels</button></div><div class=ribbonGroup><b>Mail Merge</b><button onclick="wordMergeRecipients()">Select Recipients</button><button onclick="wordMergeField()">Insert Merge Field</button><button onclick="wordPreviewMerge()">Preview Results</button><button onclick="wordFinishMerge()">Finish & Merge</button></div>`;
+      return;
+    }
+    return prevWordTab?.(tab,btn);
+  };
+  window.wordPageColor=v=>{const d=activeWord();if(!d)return;ensureWordMeta(d);d.page.color=v;applyWordPage();autoSaveWord()};
+  window.wordApplyTheme=function(name){const ed=q('#wordEditor'); if(!ed)return; ed.dataset.theme=name; ed.classList.remove('wordThemeProfessional','wordThemeClassic','wordThemeModern'); ed.classList.add('wordTheme'+name[0].toUpperCase()+name.slice(1)); autoSaveWord(); toast(name+' document style applied')};
+  window.wordInsertHorizontalLine=()=>{document.execCommand('insertHTML',false,'<hr><p><br></p>');autoSaveWord()};
+  window.wordInsertSignatureLine=()=>{document.execCommand('insertHTML',false,'<div class="signatureLine"><div></div><small>Signature</small></div><p><br></p>');autoSaveWord()};
+  window.wordInkMode=function(mode){const ed=q('#wordEditor'); if(!ed)return; ed.dataset.ink=mode; toast(mode==='off'?'Ink mode off':mode+' mode enabled — browser editing uses selection/highlight tools')};
+  window.wordEnvelope=()=>modal('Envelope','<div class=formGrid><div class="field full"><label>Delivery address</label><textarea id=envTo></textarea></div><div class="field full"><label>Return address</label><textarea id=envFrom></textarea></div></div>',()=>{const a=esc(q('#envTo').value).replace(/\n/g,'<br>'),b=esc(q('#envFrom').value).replace(/\n/g,'<br>');document.execCommand('insertHTML',false,`<section class="wordEnvelope"><div class=returnAddress>${b}</div><div class=deliveryAddress>${a}</div></section><p><br></p>`);autoSaveWord();closeModal()});
+  window.wordLabels=()=>{const text=prompt('Label text');if(!text)return;document.execCommand('insertHTML',false,`<table class="wordLabels"><tbody>${Array.from({length:4},()=>'<tr>'+Array.from({length:2},()=>`<td>${esc(text)}</td>`).join('')+'</tr>').join('')}</tbody></table><p><br></p>`);autoSaveWord()};
+  window.wordMergeRecipients=()=>{const d=activeWord();if(!d)return;const raw=prompt('Enter recipients, one per line. Use: Name,Email','Ada,ada@example.com\nTunde,tunde@example.com');if(!raw)return;d.mergeRecipients=raw.split(/\r?\n/).filter(Boolean).map(x=>{const [name,email]=x.split(',');return {name:(name||'').trim(),email:(email||'').trim()}});DB.save();toast(d.mergeRecipients.length+' recipients loaded')};
+  window.wordMergeField=()=>{const f=prompt('Field name','Name');if(f)document.execCommand('insertText',false,`«${f}»`)};
+  window.wordPreviewMerge=()=>{const d=activeWord();if(!d?.mergeRecipients?.length)return toast('Select recipients first');let html=q('#wordEditor').innerHTML,r=d.mergeRecipients[0];html=html.replaceAll('«Name»',esc(r.name)).replaceAll('«Email»',esc(r.email));modal('Mail Merge Preview',`<div class=mergePreview>${html}</div>`,()=>closeModal());q('#modalSave').textContent='Close'};
+  window.wordFinishMerge=()=>{const d=activeWord();if(!d?.mergeRecipients?.length)return toast('Select recipients first');const base=q('#wordEditor').innerHTML;const merged=d.mergeRecipients.map(r=>`<section class="mergePage">${base.replaceAll('«Name»',esc(r.name)).replaceAll('«Email»',esc(r.email))}</section>`).join('');const blob=new Blob([`<!doctype html><meta charset=utf-8><title>${esc(d.title)} - Merge</title>${merged}`],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(d.title||'mail-merge')+'-merged.html';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Merged document created')};
+
+  // Excel: richer formulas, sheet operations, print/page and analysis helpers.
+  const oldDisplay=window.displayCell || displayCell;
+  window.displayCell=displayCell=function(raw,g){
+    if(typeof raw!=='string'||!raw.startsWith('='))return raw;
+    const f=raw.slice(1).trim();
+    let m=/^(SUM|AVERAGE|MIN|MAX|COUNT|COUNTA)\(([^)]+)\)$/i.exec(f);
+    if(m){const vals=rangeVals(m[2],g),op=m[1].toUpperCase(); if(op==='COUNTA')return vals.filter(v=>String(v)!=='').length; const n=vals.map(Number).filter(Number.isFinite); if(op==='COUNT')return n.length;if(!n.length)return 0;if(op==='SUM')return n.reduce((a,b)=>a+b,0);if(op==='AVERAGE')return n.reduce((a,b)=>a+b,0)/n.length;if(op==='MIN')return Math.min(...n);if(op==='MAX')return Math.max(...n)}
+    m=/^IF\(([^,]+),([^,]+),(.+)\)$/i.exec(f); if(m){try{const cond=m[1].replace(/([A-T]\d+)/ig,x=>Number(valAt(x,g)));const yes=m[2].trim().replace(/^['"]|['"]$/g,''),no=m[3].trim().replace(/^['"]|['"]$/g,'');return Function('return ('+cond+')')()?yes:no}catch{return '#ERR'}}
+    m=/^ROUND\(([^,]+),(\d+)\)$/i.exec(f);if(m){const v=/^[A-T]\d+$/i.test(m[1].trim())?valAt(m[1].trim(),g):Number(m[1]);return Number(v).toFixed(Number(m[2]))}
+    return oldDisplay(raw,g);
+  };
+  window.xlAutoSum=()=>xlFunction('SUM');
+  window.xlFillDown=()=>{const s=state.sheets.find(x=>x.id===currentSheet);if(!s)return;const v=s.grid[xlCell.r][xlCell.c];for(let r=xlCell.r+1;r<Math.min(xlCell.r+10,s.grid.length);r++)s.grid[r][xlCell.c]=v;DB.save();drawGrid(s);toast('Filled down 9 rows')};
+  window.xlClearCell=()=>{const s=state.sheets.find(x=>x.id===currentSheet);if(!s)return;s.grid[xlCell.r][xlCell.c]='';DB.save();drawGrid(s)};
+  window.xlConditionalFormat=()=>{const s=state.sheets.find(x=>x.id===currentSheet);if(!s)return;const n=Number(prompt('Highlight selected cell if value is greater than','100'));const v=Number(s.grid[xlCell.r][xlCell.c]);const k=xlCell.r+','+xlCell.c;if(Number.isFinite(v)&&v>n)s.styles[k]=((s.styles[k]||'')+' xlHighlight').trim();DB.save();drawGrid(s);toast('Conditional format evaluated')};
+  window.xlPivotSummary=()=>{const s=state.sheets.find(x=>x.id===currentSheet);if(!s)return;const c=xlCell.c,counts={};s.grid.forEach(r=>{const k=String(r[c]||'').trim();if(k)counts[k]=(counts[k]||0)+1});modal('Pivot-style Summary','<div class=list>'+Object.entries(counts).map(([k,v])=>`<div class=item><div class=grow>${esc(k)}</div><b>${v}</b></div>`).join('')+'</div>',()=>closeModal());q('#modalSave').textContent='Close'};
+  window.xlTextToColumns=()=>{const s=state.sheets.find(x=>x.id===currentSheet);if(!s)return;const sep=prompt('Separator',',')||',';for(let r=0;r<s.grid.length;r++){const parts=String(s.grid[r][xlCell.c]||'').split(sep);parts.slice(0,Math.max(0,20-xlCell.c)).forEach((v,i)=>s.grid[r][xlCell.c+i]=v.trim())}DB.save();drawGrid(s);toast('Text split into columns')};
+  window.xlGoalSeek=()=>{const target=Number(prompt('Target result'));const current=Number(prompt('Current result'));const input=Number(prompt('Current input value'));if(![target,current,input].every(Number.isFinite)||current===0)return toast('Enter valid numbers');const result=input*(target/current);modal('Goal Seek Result',`<p>Estimated input required: <b>${result.toFixed(4)}</b></p><p>This proportional estimate is useful for simple linear scenarios.</p>`,()=>closeModal());q('#modalSave').textContent='Close'};
+  const prevExcelTab18=window.excelTab;
+  window.excelTab=function(tab,btn){
+    if(['home','insert','formulas','data','review','view','file'].includes(tab)){
+      prevExcelTab18?.(tab,btn);
+      const b=q('#excelRibbonBody'); if(!b)return;
+      if(tab==='home') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>Editing</b><button onclick="xlAutoSum()">AutoSum</button><button onclick="xlFillDown()">Fill Down</button><button onclick="xlClearCell()">Clear</button><button onclick="xlConditionalFormat()">Conditional Format</button></div>');
+      if(tab==='insert') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>Analysis</b><button onclick="xlPivotSummary()">Pivot-style Summary</button></div>');
+      if(tab==='formulas') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>More Functions</b><button onclick="xlFunction(\'COUNTA\')">COUNTA</button><button onclick="toast(\'Use =IF(A1>50,Pass,Fail) in formula bar\')">IF</button><button onclick="toast(\'Use =ROUND(A1,2) in formula bar\')">ROUND</button><button onclick="xlGoalSeek()">Goal Seek</button></div>');
+      if(tab==='data') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>Data Tools</b><button onclick="xlTextToColumns()">Text to Columns</button><button onclick="xlPivotSummary()">Summary</button></div>');
+      if(tab==='file') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>Export</b><button onclick="downloadCSV()">CSV</button><button onclick="printOffice()">PDF / Print</button></div>');
+      return;
+    }
+    return prevExcelTab18?.(tab,btn);
+  };
+
+  // Presentation: expanded record and insert workflows.
+  const prevPresTab18=window.presTab;
+  window.presTab=function(tab,btn){
+    if(tab==='record'){
+      btn?.parentElement?.querySelectorAll('button').forEach(x=>x.classList.remove('active'));btn?.classList.add('active');
+      const b=q('#presRibbonBody'); if(b)b.innerHTML='<div class=ribbonGroup><b>Record</b><button onclick="presRecordNotes()">Record Narration Notes</button><button onclick="presRehearse()">Rehearse Timings</button></div><div class=ribbonGroup><b>Export</b><button onclick="presExportOutline()">Export Outline</button><button onclick="printOffice()">Print / PDF</button></div>';return;
+    }
+    prevPresTab18?.(tab,btn);
+    const b=q('#presRibbonBody'); if(!b)return;
+    if(tab==='insert') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>Media & Content</b><button onclick="presInsertTable()">Table</button><button onclick="presInsertImage()">Image URL</button><button onclick="presInsertChart()">Chart</button><button onclick="presNewTextBox()">Text Box</button></div>');
+    if(tab==='design') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>Designer</b><button onclick="presDesigner()">Design Ideas</button></div>');
+    if(tab==='slideshow') b.insertAdjacentHTML('beforeend','<div class=ribbonGroup><b>Set Up</b><button onclick="presCustomShow()">Custom Show</button></div>');
+  };
+  window.presRecordNotes=()=>{const t=prompt('Narration / speaker notes for this slide');if(t==null)return;const s=slide();s.notes=t;DB.save();drawPres();toast('Narration notes saved')};
+  window.presExportOutline=()=>{const p=deck();if(!p)return;const txt=p.slides.map((s,i)=>`Slide ${i+1}: ${s.title}\n${s.body}\n`).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));a.download=(p.title||'presentation')+'-outline.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+  window.presInsertTable=()=>{const s=slide();if(!s)return;s.body+=(s.body?'\n':'')+'Table: Header 1 | Header 2\nRow 1 | Value\nRow 2 | Value';DB.save();drawPres();toast('Editable table content inserted')};
+  window.presInsertChart=()=>{const s=slide();if(!s)return;s.body+=(s.body?'\n':'')+'Chart data: A 40 • B 30 • C 20';DB.save();drawPres();toast('Chart placeholder inserted')};
+  window.presInsertImage=()=>{const u=prompt('Image URL');if(!u)return;const s=slide();s.image=u;DB.save();drawPres();toast('Slide image added')};
+  window.presDesigner=()=>{const s=slide();if(!s)return;const variants=['section','title-content','title-only'];s.layout=variants[(variants.indexOf(s.layout)+1)%variants.length]||'title-content';DB.save();setSlideLayout(s.layout);toast('Alternative slide design applied')};
+  window.presCustomShow=()=>{const p=deck();if(!p)return;const raw=prompt('Slides to include, e.g. 1,3,4','1');if(!raw)return;const ids=raw.split(',').map(x=>Number(x.trim())-1).filter(i=>i>=0&&i<p.slides.length);if(!ids.length)return;const clone={...p,slides:ids.map(i=>p.slides[i])};const w=window.open('','_blank');w.document.write('<style>body{font-family:Arial;background:#111;color:#fff;padding:40px}.s{min-height:80vh;display:grid;place-items:center;text-align:center;border-bottom:1px solid #444}h1{font-size:52px}p{font-size:28px;white-space:pre-wrap}</style>'+clone.slides.map(s=>`<section class=s><div><h1>${esc(s.title||'')}</h1><p>${esc(s.body||'')}</p></div></section>`).join(''))};
+
+  setTimeout(()=>{
+    const wb=document.querySelector('.wordTabs'); if(wb&&!wb.querySelector('[onclick*=draw]')) console.warn('Word v18 tabs not injected in markup');
+    const home=document.querySelector('#page-home .hero p'); if(home) home.textContent='Create professional documents, spreadsheets and presentations with an expanded Ethan Office ribbon, analysis, layout, review and presentation workflow.';
+  },0);
+})();
+
+
+// ===== Ethan Office v18.1: Device Save + My Office Files integration =====
+(function(){
+'use strict';
+
+function officeDownload(blob,name){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+async function writeDeviceFile(blob,name,description,accept){
+  // Browsers that support the File System Access API can save to a user-selected
+  // folder/name. Mobile and other browsers fall back to the normal Downloads folder.
+  if(window.showSaveFilePicker){
+    try{
+      const ext='.'+(name.split('.').pop()||'txt');
+      const handle=await window.showSaveFilePicker({
+        suggestedName:name,
+        types:[{description:description||'Ethan Office file',accept:{[blob.type||'application/octet-stream']:accept||[ext]}}]
+      });
+      const writable=await handle.createWritable();
+      await writable.write(blob);await writable.close();
+      return {ok:true,name:handle.name||name,method:'device'};
+    }catch(err){
+      if(err && err.name==='AbortError') return {ok:false,cancelled:true};
+      console.warn('Direct file save unavailable; using download fallback.',err);
+    }
+  }
+  officeDownload(blob,name);
+  return {ok:true,name,method:'downloads'};
+}
+function stampDevice(item,name){
+  if(!item)return;
+  item.deviceSavedAt=Date.now();
+  item.deviceFileName=name;
+  DB.save();
+  try{renderFiles()}catch(e){}
+}
+function wordBlob(d){
+  ensureWordMeta?.(d);
+  const p=d.page||{}, title=(d.title||'Untitled Document').trim()||'Untitled Document';
+  const header=typeof ethanBrandSanitize==='function'?ethanBrandSanitize(d.header||''):(d.header||'');
+  const content=typeof ethanBrandSanitize==='function'?ethanBrandSanitize(d.content||''):(d.content||'');
+  const footer=typeof ethanBrandSanitize==='function'?ethanBrandSanitize(d.footer||''):(d.footer||'');
+  const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="Generator" content="Ethan Office Suite"><title>${esc(title)}</title>
+  <style>body{font-family:Aptos,Calibri,Arial,sans-serif;line-height:1.5;color:#111;margin:1in}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:6px}img{max-width:100%}.pageBreak{page-break-after:always}</style>
+  </head><body><header>${header}</header>${content}<footer>${footer}</footer></body></html>`;
+  return new Blob([html],{type:'application/msword'});
+}
+function excelBlob(book){
+  const rows=(book.grid||[]).map(row=>'<tr>'+row.map(v=>`<td>${esc(typeof displayCell==='function'?displayCell(v,book.grid):v)}</td>`).join('')+'</tr>').join('');
+  const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="Generator" content="Ethan Office Suite"></head><body><table>${rows}</table></body></html>`;
+  return new Blob([html],{type:'application/vnd.ms-excel'});
+}
+function presentationBlob(p){
+  const payload={
+    app:'Ethan Presentation',version:'18.1',title:p.title||'Untitled Presentation',
+    slides:p.slides||[],theme:p.theme||'navy',transition:p.transition||'none',savedAt:new Date().toISOString()
+  };
+  return new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+}
+
+window.saveWordToDevice=async function(){
+  if(!currentWord)return;
+  saveWord(true);
+  const d=state.wordDocs.find(x=>x.id===currentWord); if(!d)return;
+  const name='Ethan-Word-'+safeName(d.title||'Untitled Document')+'.doc';
+  const result=await writeDeviceFile(wordBlob(d),name,'Ethan Word document',['.doc']);
+  if(result.ok){stampDevice(d,result.name);toast(result.method==='device'?'Saved to your device and My Office Files':'Saved to Downloads and My Office Files');status('Saved to device + Ethan Office')}
+};
+window.saveSheetToDevice=async function(){
+  if(!currentSheet)return;
+  saveSheet();
+  const book=state.sheets.find(x=>x.id===currentSheet); if(!book)return;
+  const name='Ethan-Excel-'+safeName(book.title||'Workbook')+'.xls';
+  const result=await writeDeviceFile(excelBlob(book),name,'Ethan Excel workbook',['.xls']);
+  if(result.ok){stampDevice(book,result.name);toast(result.method==='device'?'Saved to your device and My Office Files':'Saved to Downloads and My Office Files');status('Saved to device + Ethan Office')}
+};
+window.savePresToDevice=async function(){
+  if(!currentPres)return;
+  savePres();
+  const p=state.presentations.find(x=>x.id===currentPres); if(!p)return;
+  const name='Ethan-Presentation-'+safeName(p.title||'Presentation')+'.ethanpresentation';
+  const result=await writeDeviceFile(presentationBlob(p),name,'Editable Ethan Presentation',['.ethanpresentation']);
+  if(result.ok){stampDevice(p,result.name);toast(result.method==='device'?'Saved to your device and My Office Files':'Saved to Downloads and My Office Files');status('Saved to device + Ethan Office')}
+};
+
+window.downloadOfficeFile=async function(type,id){
+  let item,blob,name,desc,ext;
+  if(type==='Word'){item=state.wordDocs.find(x=>x.id===id);if(!item)return;blob=wordBlob(item);name='Ethan-Word-'+safeName(item.title)+'.doc';desc='Ethan Word document';ext=['.doc']}
+  else if(type==='Excel'){item=state.sheets.find(x=>x.id===id);if(!item)return;blob=excelBlob(item);name='Ethan-Excel-'+safeName(item.title)+'.xls';desc='Ethan Excel workbook';ext=['.xls']}
+  else if(type==='Presentation'){item=state.presentations.find(x=>x.id===id);if(!item)return;blob=presentationBlob(item);name='Ethan-Presentation-'+safeName(item.title)+'.ethanpresentation';desc='Editable Ethan Presentation';ext=['.ethanpresentation']}
+  const result=await writeDeviceFile(blob,name,desc,ext);
+  if(result.ok){stampDevice(item,result.name);toast('Device copy saved')}
+};
+
+// Keep My Office Files as the persistent in-app library and expose a direct device-save action.
+const previousRenderFiles=window.renderFiles||renderFiles;
+window.renderFiles=function(){
+  previousRenderFiles();
+  document.querySelectorAll('#filesList .fileRow').forEach(row=>{
+    if(row.querySelector('.v181DeviceSave'))return;
+    const icon=row.querySelector('.fileTypeIcon'),open=row.querySelector('button[onclick^="openRecent"]');
+    if(!icon||!open)return;
+    let type=['Word','Excel','Presentation'].find(t=>icon.classList.contains(t)); if(!type)return;
+    const m=(open.getAttribute('onclick')||'').match(/openRecent\('[^']+','([^']+)'\)/); if(!m)return;
+    const id=m[1], item=type==='Word'?state.wordDocs.find(x=>x.id===id):type==='Excel'?state.sheets.find(x=>x.id===id):state.presentations.find(x=>x.id===id);
+    const b=document.createElement('button');b.className='btn sm v181DeviceSave';b.textContent='Save to Device';b.onclick=()=>downloadOfficeFile(type,id);row.appendChild(b);
+    if(item?.deviceSavedAt){
+      const meta=row.querySelector('.fileMeta');
+      if(meta&&!meta.querySelector('.deviceSavedPill')){
+        const x=document.createElement('span');x.className='locationPill deviceSavedPill';x.textContent='Device copy '+new Date(item.deviceSavedAt).toLocaleString();meta.appendChild(x);
+      }
+    }
+  });
+};
+
+// Change only MANUAL save buttons. Autosave and close continue to save silently inside Ethan Office.
+document.querySelectorAll('[onclick="saveWord()"]').forEach(b=>b.setAttribute('onclick','saveWordToDevice()'));
+const rewriteRibbonSaveButtons=()=>{
+  document.querySelectorAll('button').forEach(b=>{
+    const code=b.getAttribute('onclick')||'';
+    if(code==='saveSheet()') b.setAttribute('onclick','saveSheetToDevice()');
+    if(code==='savePres()') b.setAttribute('onclick','savePresToDevice()');
+  });
+};
+rewriteRibbonSaveButtons();
+document.addEventListener('click',()=>setTimeout(rewriteRibbonSaveButtons,0),true);
+
+const saveStatus=document.getElementById('saveStatus');
+if(saveStatus) saveStatus.title='Autosave keeps the working file in Ethan Office. Press Save to also create a device copy.';
+
+try{renderFiles()}catch(e){console.error(e)}
+})();
