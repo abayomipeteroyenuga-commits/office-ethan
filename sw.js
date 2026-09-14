@@ -1,13 +1,55 @@
-const CACHE='ethan-office-v18.1-device-save';
-const CORE=['./','./index.html','./manifest.webmanifest','./assets/style.css','./assets/app.js','./assets/icon-96.png','./assets/icon-192.png','./assets/icon-512.png','./assets/ethan-office-brand.jpg','./document-utility.html','./assets/ethan-documents-logo.png'];
-self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))});
-self.addEventListener('activate',e=>e.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))])));
-self.addEventListener('fetch',e=>{
- if(e.request.method!=='GET')return;
- const url=new URL(e.request.url);
- if(e.request.mode==='navigate'){
-  const fallback=url.pathname.endsWith('/document-utility.html')||url.pathname.endsWith('document-utility.html')?'./document-utility.html':'./index.html';
-  e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(fallback,copy));return r}).catch(()=>caches.match(fallback)));return;
- }
- if(url.origin===self.location.origin)e.respondWith(caches.match(e.request).then(cached=>cached||fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r})));
+const CACHE = "ethan-erp-lms-v9.2";
+const ASSETS = [
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app.js",
+  "./config.js",
+  "./supabase-client.js",
+  "./assets/ethan-logo.jpeg"
+];
+
+self.addEventListener("install", event => {
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE).then(cache => cache.addAll(ASSETS))
+  );
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", event => {
+  if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+  const isAppAsset =
+    url.pathname.endsWith("/") ||
+    url.pathname.endsWith("/index.html") ||
+    url.pathname.endsWith("/styles.css") ||
+    url.pathname.endsWith("/app.js") ||
+    url.pathname.endsWith("/config.js") ||
+    url.pathname.endsWith("/supabase-client.js");
+
+  if (isAppAsset) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then(cached => cached || fetch(event.request))
+  );
 });
