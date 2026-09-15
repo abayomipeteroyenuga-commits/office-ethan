@@ -49,6 +49,18 @@ function setSession(user){
   localStorage.setItem(STORE.session, JSON.stringify({email:user.email, ts:Date.now()}));
 }
 function initials(name){ return name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0].toUpperCase()).join("") || "EU"; }
+
+const ETHAN_SUPER_ADMIN_EMAILS = new Set(["fedora4jesus@gmail.com"]);
+function resolveAuthenticatedRole(authUser, profile){
+  const email=String(authUser?.email||profile?.email||"").trim().toLowerCase();
+  if(ETHAN_SUPER_ADMIN_EMAILS.has(email)) return "super_admin";
+  const dbRole=String(profile?.role||"").trim().toLowerCase();
+  if(["super_admin","admin","instructor","student","parent"].includes(dbRole)) return dbRole;
+  const metaRole=String(authUser?.user_metadata?.role||"").trim().toLowerCase();
+  if(["super_admin","admin","instructor","student","parent"].includes(metaRole)) return metaRole;
+  return "student";
+}
+
 function portalRoleLabel(user){
   if(user?.role==="student"){
     if(user?.learnerType==="professional") return "Professional";
@@ -115,7 +127,7 @@ $("#signinForm").addEventListener("submit", async e=>{
       const authUser=result.user;
       let profile=null;
       try{ profile=await window.ETHAN_BACKEND.getProfile(authUser.id); }catch(_){}
-      const role=profile?.role||authUser.user_metadata?.role||"student";
+      const role=resolveAuthenticatedRole(authUser,profile);
       const user={
         firstName:profile?.first_name||authUser.user_metadata?.first_name||"Ethan",
         lastName:profile?.last_name||authUser.user_metadata?.last_name||"User",
@@ -739,7 +751,7 @@ function closeModal(){const m=$("#activeModal");if(m)m.remove()}
      const session=await window.ETHAN_BACKEND.getSession();
      if(session?.user){
        let profile=null; try{profile=await window.ETHAN_BACKEND.getProfile(session.user.id)}catch(_){}
-       const user={firstName:profile?.first_name||"Ethan",lastName:profile?.last_name||"User",name:`${profile?.first_name||"Ethan"} ${profile?.last_name||"User"}`,email:session.user.email,phone:profile?.phone||"",role:profile?.role||"student",learnerType:session.user.user_metadata?.learner_type||session.user.user_metadata?.learnerType||"student",id:session.user.id};
+       const user={firstName:profile?.first_name||"Ethan",lastName:profile?.last_name||"User",name:`${profile?.first_name||"Ethan"} ${profile?.last_name||"User"}`,email:session.user.email,phone:profile?.phone||"",role:resolveAuthenticatedRole(session.user,profile),learnerType:session.user.user_metadata?.learner_type||session.user.user_metadata?.learnerType||"student",id:session.user.id};
        openPortal(user); return;
      }
    }catch(_){}
