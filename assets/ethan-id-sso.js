@@ -1,0 +1,9 @@
+(()=>{const cfg=window.ETHAN_OFFICE_CONFIG||{};let sb=null;
+const bar=document.createElement('div');bar.style.cssText='position:fixed;right:18px;bottom:18px;z-index:99999;background:#071b3a;color:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 10px 30px #0003;font:600 13px Arial;display:none;max-width:320px';document.body.appendChild(bar);
+const safe=x=>String(x||'').replace(/[<>]/g,'');
+function show(u){const n=u?.user_metadata?.full_name||u?.user_metadata?.first_name||u?.email||'Ethan User';bar.innerHTML='✓ Ethan ID Connected<br><span style="font-weight:400;opacity:.85">'+safe(n)+'</span>';bar.style.display='block';setTimeout(()=>bar.style.display='none',6500)}
+async function init(){if(!window.supabase||!cfg.supabaseUrl||!cfg.supabasePublishableKey)return;sb=window.supabase.createClient(cfg.supabaseUrl,cfg.supabasePublishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+const q=new URLSearchParams(location.search),ticket=q.get('ethan_sso');
+if(ticket){bar.textContent='Connecting Ethan ID…';bar.style.display='block';try{const r=await fetch(cfg.ssoFunctionUrl,{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.supabasePublishableKey},body:JSON.stringify({action:'exchange',ticket,target:'office'})});const o=await r.json();if(!r.ok||!o.access_token)throw new Error(o.error||'Unable to connect Ethan ID.');const {data,error}=await sb.auth.setSession({access_token:o.access_token,refresh_token:o.refresh_token});if(error)throw error;history.replaceState({},document.title,location.pathname+location.hash);show(data.user)}catch(e){bar.innerHTML='Ethan ID connection failed.<br><span style="font-weight:400">'+safe(e.message||e)+'</span>'}}
+else{const {data:{session}}=await sb.auth.getSession();if(session?.user)show(session.user)}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init()})();
